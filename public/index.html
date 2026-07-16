@@ -22,6 +22,11 @@
   }
   #roomName { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
   #hint { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  #muteTag {
+    margin-top: 6px; display: inline-block;
+    font-family: 'Press Start 2P', monospace; font-size: 10px;
+    color: #fb4343; letter-spacing: 2px;
+  }
 
   #paintUI {
     position: fixed; top: 16px; right: 16px; z-index: 10;
@@ -197,7 +202,8 @@
 
 <div id="hud">
   <div id="roomName"></div>
-  <div id="hint">Arrows/WAS to move · Hold D to dance · P to paint · Enter to chat</div>
+  <div id="hint">Arrows/WAS to move · Hold D to dance · T to taunt · P to paint · Enter to chat · M to mute</div>
+  <div id="muteTag" hidden>MUTED</div>
 </div>
 
 <div id="paintUI" hidden>

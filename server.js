@@ -232,6 +232,11 @@ function handleClient(socket) {
       broadcast(id, { t: 'player-leave', id });
       console.log(`player ${id} left (${players.size} online)`);
       checkAbort(); // 게임 중 역할 한쪽이 0명이 되면 즉시 종료
+      // 참여자가 전부 나가면 타이머와 무관하게 즉시 라운드 리셋 (ending 포함)
+      if (players.size === 0 && phase !== 'lobby') {
+        console.log('all players left — round reset');
+        resetLobby();
+      }
       // 빈 슬롯에 대기열 선두 승격 (게임 중엔 승격 안 함)
       if (phase === 'lobby') {
         while (players.size < MAX_PLAYERS && waiting.length) {
@@ -398,6 +403,11 @@ function handleMessage(id, msg) {
       return;
     }
     broadcastAll({ t: 'chat', id, name: p.name || `player ${id}`, text });
+  } else if (msg.t === 'taunt') {
+    // 메롱: 게임 중엔 (안 잡힌) 하이더만, 로비/셀레브레이션 중엔 자유
+    if (p.caught) return;
+    if (phase !== 'lobby' && phase !== 'ending' && p.role !== 'hider') return;
+    broadcast(id, { t: 'taunt', id, x: p.x, z: p.z, room: p.room });
   } else if (msg.t === 'tag') {
     if (phase !== 'play' || p.role !== 'finder') return;
     const target = players.get(msg.id | 0);

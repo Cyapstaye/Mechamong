@@ -730,6 +730,24 @@ function onNetMessage(e) {
     case 'shoot':
       spawnBullet(msg.x, msg.z, msg.dx, msg.dz, msg.room, false);
       break;
+    case 'taunt': {
+      if (msg.room === myRoom) {
+        // 같은 공간: 실제 상대 위치에서 (거리 감쇠 포함)
+        playTaunt(msg.x - myPos.x, msg.z - myPos.z);
+      } else if (myRoom >= 0 && msg.room >= 0) {
+        // 다른 방: 그 방으로 향하는 문 쪽에서 들림
+        const door = ROOMS[myRoom].doors.find((dr) => dr.to.room === msg.room);
+        if (door) {
+          const dw = doorWorld(door);
+          playTaunt(dw.x - myPos.x, dw.z - myPos.z);
+        } else {
+          playTaunt(null, 0);
+        }
+      } else {
+        playTaunt(null, 0); // 로비↔방 사이 — 무지향으로 작게
+      }
+      break;
+    }
   }
 }
 
@@ -971,6 +989,16 @@ function playSting(sting) {
   sting.play().catch(fadeInBgm); // 재생 실패 시에도 브금은 복귀
 }
 
+// ---------- 뮤트 (M) ----------
+let muted = false;
+function toggleMute() {
+  muted = !muted;
+  bgm.muted = muted;
+  sfxGameStart.muted = muted;
+  sfxGameEnd.muted = muted;
+  document.getElementById('muteTag').hidden = !muted;
+}
+
 // ---------- 입력 ----------
 const keys = new Set();
 addEventListener('keydown', (e) => {
@@ -978,6 +1006,10 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && e.metaKey && e.altKey) {
     e.preventDefault();
     toggleEditMode();
+    return;
+  }
+  if (e.code === 'KeyM' && !e.repeat && !e.metaKey && !e.altKey && !e.ctrlKey) {
+    toggleMute();
     return;
   }
   if (e.code === 'Escape' && !e.repeat) {
@@ -989,6 +1021,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'KeyP' && !e.repeat && !editMode) togglePaintMode();
+  if (e.code === 'KeyT' && !e.repeat && !editMode) tryTaunt();
   keys.add(e.code);
 });
 
@@ -1021,6 +1054,54 @@ chatInput.addEventListener('keydown', (e) => {
     closeChat();
   }
 });
+
+// ---------- 메롱 (T) — 하이더 도발, 입체음향 ----------
+const tauntCtx = new (window.AudioContext || window.webkitAudioContext)();
+let tauntBuf = null;
+fetch('audio/taunt.m4a')
+  .then((r) => r.arrayBuffer())
+  .then((b) => tauntCtx.decodeAudioData(b))
+  .then((buf) => { tauntBuf = buf; })
+  .catch(() => {});
+
+// dx/dz: 내 캐릭터 기준 상대 위치 (화면 위 = 정면). dx가 null이면 무지향(멀리서 나는 소리).
+function playTaunt(dx, dz) {
+  if (!tauntBuf || muted) return;
+  if (tauntCtx.state === 'suspended') tauntCtx.resume().catch(() => {});
+  const src = tauntCtx.createBufferSource();
+  src.buffer = tauntBuf;
+  const gain = tauntCtx.createGain();
+  if (dx === null) {
+    gain.gain.value = 0.45;
+    src.connect(gain);
+    gain.connect(tauntCtx.destination);
+  } else {
+    gain.gain.value = 0.9;
+    const pan = tauntCtx.createPanner();
+    pan.panningModel = 'HRTF'; // 에어팟 등에서 상하좌우 입체감
+    pan.distanceModel = 'linear';
+    pan.refDistance = 3;
+    pan.maxDistance = 50;
+    // WebAudio 리스너 정면 = -z → 화면 위쪽(-z)이 그대로 '앞'
+    pan.positionX.value = dx;
+    pan.positionY.value = 0;
+    pan.positionZ.value = dz;
+    src.connect(pan);
+    pan.connect(gain);
+    gain.connect(tauntCtx.destination);
+  }
+  src.start();
+}
+
+let lastTaunt = 0;
+function tryTaunt() {
+  if (performance.now() - lastTaunt < 120) return; // 연타 OK, 플러드만 방지
+  if (me.caught || !connected || !ws) return;
+  if (gameMode !== 'lobby' && myRole !== 'hider') return; // 게임 중엔 하이더만
+  lastTaunt = performance.now();
+  playTaunt(0, 0); // 내 귀엔 정면
+  ws.send(JSON.stringify({ t: 'taunt' }));
+}
 
 function addChatLine(name, text, sys) {
   const line = document.createElement('div');
