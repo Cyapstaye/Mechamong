@@ -75,7 +75,7 @@
 </head>
 <body>
 <canvas id="bg" width="512" height="512"></canvas>
-<canvas id="title" width="26" height="8"></canvas>
+<canvas id="title" width="44" height="8"></canvas>
 
 <div id="bust">
   <canvas id="bustArt" width="64" height="56"></canvas>
@@ -174,11 +174,17 @@
   b.fillStyle = 'rgba(255,255,255,0.85)';
   b.fillRect(21, 18, 8, 3);
 
-  // ---------- 히어로 타이틀: 200♥ (픽셀 레터링) ----------
+  // ---------- 히어로 타이틀: 2YEARS♥ (픽셀 레터링) ----------
   (() => {
     const t = document.getElementById('title').getContext('2d');
-    const G2 = ['01110', '10001', '00001', '00010', '00100', '01000', '11111'];
-    const G0 = ['01110', '10001', '10011', '10101', '11001', '10001', '01110'];
+    const GLYPHS = {
+      '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+      'Y': ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+      'E': ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
+      'A': ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+      'R': ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+      'S': ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
+    };
     const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
     const draw = (rows, x, y, color) => {
       t.fillStyle = color;
@@ -189,15 +195,17 @@
       });
     };
     const SHADOW = '#141824';
+    const TEXT = '2YEARS';
     // 좌우 여백 없이 캔버스 가장자리까지 (스크린 양끝에 딱 붙도록)
     // 그림자 (아래로 1px) → 본색
-    draw(G2, 0, 1, SHADOW); draw(G0, 6, 1, SHADOW); draw(G0, 12, 1, SHADOW); draw(HEART, 19, 2, SHADOW);
-    draw(G2, 0, 0, '#f2f4f8'); draw(G0, 6, 0, '#f2f4f8'); draw(G0, 12, 0, '#f2f4f8');
-    draw(HEART, 19, 1, '#fb4343');
+    [...TEXT].forEach((ch, i) => draw(GLYPHS[ch], i * 6, 1, SHADOW));
+    draw(HEART, 37, 2, SHADOW);
+    [...TEXT].forEach((ch, i) => draw(GLYPHS[ch], i * 6, 0, '#f2f4f8'));
+    draw(HEART, 37, 1, '#fb4343');
     // 하트 하이라이트
     t.fillStyle = '#ff9d9d';
-    t.fillRect(20, 2, 1, 1);
-    t.fillRect(21, 3, 1, 1);
+    t.fillRect(38, 2, 1, 1);
+    t.fillRect(39, 3, 1, 1);
   })();
 
   // ---------- 랜딩 징글 (로딩 시 1회) ----------
