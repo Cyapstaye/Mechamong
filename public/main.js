@@ -272,12 +272,18 @@ function makeParts(facing) {
   d.roundRect(body.x, body.y, body.w, body.h, body.r);
   d.stroke();
 
-  // 바이저 (뒤를 볼 땐 없음)
+  posterizeAlpha(mask);
+  posterizeAlpha(detail);
+
+  // 바이저 (뒤를 볼 땐 없음): 페인트 위에 20% 투명도로만 겹침 —
+  // 몸을 칠하면 바이저도 같이 칠해지고 형태만 살짝 비친다.
+  // 반투명이라 알파 이진화(posterize) 이후에 그린다.
   let visor = null;
   if (facing === 'down') visor = { x: 20, y: 17, w: 20, h: 11, r: 5 };
   if (facing === 'left') visor = { x: 14, y: 17, w: 15, h: 10, r: 5 };
   if (facing === 'right') visor = { x: 31, y: 17, w: 15, h: 10, r: 5 };
   if (visor) {
+    d.globalAlpha = 0.2;
     d.fillStyle = VISOR;
     d.beginPath();
     d.roundRect(visor.x, visor.y, visor.w, visor.h, visor.r);
@@ -288,10 +294,9 @@ function makeParts(facing) {
     d.stroke();
     d.fillStyle = VISOR_HI;
     d.fillRect(visor.x + 3, visor.y + 2, 5, 3);
+    d.globalAlpha = 1;
   }
 
-  posterizeAlpha(mask);
-  posterizeAlpha(detail);
   return { mask, detail };
 }
 
@@ -383,16 +388,40 @@ function createCharacter() {
   const char = {
     paintCanvas, pctx, sctx, tex, group, sprite, shadow,
     facing: 'down', moving: false, phase: 0,
+    dancing: false, dancePhase: 0,
     bobSeed: Math.random() * Math.PI * 2, caught: false, rainbow: false,
   };
   compose(char);
   return char;
 }
 
+// 쌈바 춤: 빵댕이가 좌우로 슉슉, 상체는 반대로 기울고 발은 바닥 고정 — 4프레임 루프
+const danceWork = mkCanvas();
+const danceCtx = danceWork.getContext('2d');
+const DANCE_SWAY = [0, 3, 0, -3];
+const HIP_TOP = 30; // 머리~허리 | 빵댕이 경계
+const HIP_BOT = 48; // 빵댕이 | 발 경계
+
 function compose(char) {
-  const frame = char.moving ? Math.floor(char.phase) % 4 : -1;
-  const bob = char.moving && Math.floor(char.phase) % 2 === 1 ? 1 : 0;
-  composeTo(char.sctx, char.paintCanvas, char.facing, frame, bob);
+  if (char.dancing) {
+    composeTo(danceCtx, char.paintCanvas, char.facing, -1, 0);
+    const s = char.sctx;
+    s.clearRect(0, 0, SPR, SPR);
+    s.imageSmoothingEnabled = false;
+    const f = Math.floor(char.dancePhase) % 4;
+    const sway = DANCE_SWAY[f];
+    const bob = f % 2; // 씰룩일 때 살짝 바운스
+    // 상체: 반대쪽으로 살짝 기울기
+    s.drawImage(danceWork, 0, 0, SPR, HIP_TOP, -Math.round(sway / 2), bob, SPR, HIP_TOP);
+    // 빵댕이: 크게 슉
+    s.drawImage(danceWork, 0, HIP_TOP, SPR, HIP_BOT - HIP_TOP, sway, HIP_TOP + bob, SPR, HIP_BOT - HIP_TOP);
+    // 발: 제자리
+    s.drawImage(danceWork, 0, HIP_BOT, SPR, SPR - HIP_BOT, 0, HIP_BOT, SPR, SPR - HIP_BOT);
+  } else {
+    const frame = char.moving ? Math.floor(char.phase) % 4 : -1;
+    const bob = char.moving && Math.floor(char.phase) % 2 === 1 ? 1 : 0;
+    composeTo(char.sctx, char.paintCanvas, char.facing, frame, bob);
+  }
   // 리빌: 무지개 발광 / 잡힘: 회색 처리
   if (char.rainbow) {
     char.sctx.globalCompositeOperation = 'source-atop';
@@ -440,6 +469,7 @@ function addOther(p) {
   for (const s of p.strokes || []) drawStroke(char, s);
   char.facing = p.f || 'down';
   char.moving = !!p.mv;
+  char.dancing = !!p.d;
   char.group.position.set(p.x, 0, p.z);
   compose(char);
   gameScene.add(char.group);
@@ -577,6 +607,7 @@ function onNetMessage(e) {
       gameMode = 'play';
       bigTimerEnd = 0;
       topTimerEnd = Date.now() + msg.playTime * 1000;
+      playSting(sfxGameStart); // 파인더 투입 — 브금 멈추고 스팅 후 페이드 인
       if (myRole === 'finder') {
         fadeToRoom(msg.rooms[myId] ?? 0);
       } else {
@@ -591,31 +622,57 @@ function onNetMessage(e) {
       if (myRole === 'hider' && !me.caught) {
         frozen = true;
         me.rainbow = true;
+        me.dancing = true; // 생존 하이더는 지랄발광 쌈바
       }
       for (const [id, o] of others) {
-        if (roles[id] === 'hider' && !o.char.caught) o.char.rainbow = true;
+        if (roles[id] === 'hider' && !o.char.caught) {
+          o.char.rainbow = true;
+          o.char.dancing = true;
+        }
       }
       break;
     }
     case 'caught': {
       if (msg.id === myId) {
         me.caught = true;
+        me.dancing = false;
         frozen = true;
       } else {
         const o = others.get(msg.id);
-        if (o) o.char.caught = true;
+        if (o) {
+          o.char.caught = true;
+          o.char.dancing = false;
+        }
       }
       break;
     }
-    case 'round-end':
-      topTimerEnd = 0;
+    case 'round-end': {
+      const stay = (msg.stay || 50) * 1000;
+      topTimerEnd = Date.now() + stay; // 로비 복귀까지 카운트다운
       bigTimerEnd = 0;
+      playSting(sfxGameEnd); // 라운드 종료 — 브금 멈추고 스팅 후 페이드 인
       if (msg.result === 'finder') {
         flyBanner('EZ~~~', 'red');
-        setTimeout(backToLobby, 5000);
       } else {
-        backToLobby();
+        if (msg.sur) flyBanner('HAHA~~', 'rainbow'); // 자연 승리는 리빌 때 이미 지나감
+        // 하이더 승리 셀레브레이션: 생존 하이더 무지개 + 쌈바
+        if (myRole === 'hider' && !me.caught) {
+          frozen = true;
+          me.rainbow = true;
+          me.dancing = true;
+        }
+        for (const [oid, o] of others) {
+          if (roles[oid] === 'hider' && !o.char.caught) {
+            o.char.rainbow = true;
+            o.char.dancing = true;
+          }
+        }
       }
+      setTimeout(backToLobby, stay);
+      break;
+    }
+    case 'chat':
+      addChatLine(msg.name, msg.text, msg.sys);
       break;
     case 'abort':
       location.href = '/';
@@ -637,6 +694,8 @@ function onNetMessage(e) {
       o.target.z = msg.z;
       o.char.facing = msg.f || o.char.facing;
       o.char.moving = !!msg.mv;
+      // 리빌 강제 춤(rainbow)은 이동 패킷이 꺼도 유지
+      if (!o.char.rainbow) o.char.dancing = !!msg.d;
       if (o.room !== msg.room) {
         o.room = msg.room;
         o.char.group.position.set(msg.x, 0, msg.z);
@@ -683,6 +742,7 @@ function sendMove() {
     room: myRoom,
     f: me.facing,
     mv: me.moving ? 1 : 0,
+    d: me.dancing ? 1 : 0,
   }));
 }
 
@@ -705,6 +765,7 @@ const waitTitleEl = document.getElementById('waitTitle');
 const waitTipEl = document.getElementById('waitTip');
 
 readyBtn.addEventListener('click', () => {
+  readyBtn.blur(); // 포커스가 남으면 Enter/Space가 버튼을 다시 눌러버림
   if (gameMode !== 'lobby' || waitingRoom || !connected) return;
   readyOn = !readyOn;
   readyBtn.classList.toggle('on', readyOn);
@@ -761,6 +822,7 @@ function backToLobby() {
   bigTimerEnd = 0;
   me.caught = false;
   me.rainbow = false;
+  me.dancing = false;
   roles = {};
   // 라운드 종료 — 모두의 색칠 초기화 (서버도 스트로크 리셋)
   clearChar(me);
@@ -770,6 +832,7 @@ function backToLobby() {
   for (const o of others.values()) {
     o.char.caught = false;
     o.char.rainbow = false;
+    o.char.dancing = false;
     clearChar(o.char);
     compose(o.char);
   }
@@ -867,9 +930,51 @@ setInterval(() => {
   }
 }, 100);
 
+// ---------- 게임 BGM (계속 루프) ----------
+// 자동재생이 막히면 성공할 때까지 모든 상호작용에서 재시도
+const bgm = new Audio('audio/bgm.m4a');
+bgm.loop = true;
+bgm.volume = 0.4;
+const bgmEvs = ['pointerdown', 'click', 'keydown', 'touchend'];
+const startBgm = () => {
+  if (!bgm.paused) return;
+  bgm.play()
+    .then(() => bgmEvs.forEach((ev) => removeEventListener(ev, startBgm)))
+    .catch(() => {});
+};
+bgmEvs.forEach((ev) => addEventListener(ev, startBgm));
+startBgm();
+
+// 스팅어: 브금 잠깐 멈추고 1회 재생 → 끝나면 브금 페이드 인
+const sfxGameStart = new Audio('audio/game-start.m4a');
+const sfxGameEnd = new Audio('audio/game-end.m4a');
+sfxGameStart.volume = 0.7;
+sfxGameEnd.volume = 0.7;
+const BGM_VOL = 0.4;
+let bgmFadeTimer = null;
+
+function fadeInBgm() {
+  clearInterval(bgmFadeTimer);
+  bgm.volume = 0;
+  bgm.play().catch(() => {});
+  bgmFadeTimer = setInterval(() => {
+    bgm.volume = Math.min(BGM_VOL, bgm.volume + BGM_VOL / 20);
+    if (bgm.volume >= BGM_VOL) clearInterval(bgmFadeTimer);
+  }, 100); // 약 2초에 걸쳐 페이드 인
+}
+
+function playSting(sting) {
+  clearInterval(bgmFadeTimer);
+  bgm.pause();
+  sting.currentTime = 0;
+  sting.onended = fadeInBgm;
+  sting.play().catch(fadeInBgm); // 재생 실패 시에도 브금은 복귀
+}
+
 // ---------- 입력 ----------
 const keys = new Set();
 addEventListener('keydown', (e) => {
+  if (chatOpen) return; // 채팅 입력 중엔 게임 키 무시
   if (e.code === 'KeyM' && e.metaKey && e.altKey) {
     e.preventDefault();
     toggleEditMode();
@@ -879,9 +984,59 @@ addEventListener('keydown', (e) => {
     toggleEscMenu();
     return;
   }
+  if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat && !paintMode && !editMode && !escOpen && !waitingRoom) {
+    openChat();
+    return;
+  }
   if (e.code === 'KeyP' && !e.repeat && !editMode) togglePaintMode();
   keys.add(e.code);
 });
+
+// ---------- 채팅 (Enter로 열기, /gg.gg = 항복) ----------
+const chatLog = document.getElementById('chatLog');
+const chatInput = document.getElementById('chatInput');
+let chatOpen = false;
+
+function openChat() {
+  chatOpen = true;
+  chatInput.hidden = false;
+  chatInput.value = '';
+  keys.clear();
+  setTimeout(() => chatInput.focus(), 0);
+}
+
+function closeChat() {
+  chatOpen = false;
+  chatInput.hidden = true;
+  chatInput.blur();
+}
+
+chatInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.code === 'Escape') {
+    closeChat();
+  } else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    const text = chatInput.value.trim().slice(0, 120);
+    if (text && connected && ws) ws.send(JSON.stringify({ t: 'chat', text }));
+    closeChat();
+  }
+});
+
+function addChatLine(name, text, sys) {
+  const line = document.createElement('div');
+  line.className = sys ? 'line sys' : 'line';
+  if (sys) {
+    line.textContent = text;
+  } else {
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = `${name || '???'}: `;
+    line.append(who, document.createTextNode(text));
+  }
+  chatLog.appendChild(line);
+  while (chatLog.children.length > 6) chatLog.firstChild.remove();
+  setTimeout(() => line.remove(), 9000);
+}
 
 // ---------- ESC 메뉴 (Leave Round) ----------
 const escMenu = document.getElementById('escMenu');
@@ -1421,13 +1576,17 @@ requestAnimationFrame(() => { fadeEl.style.opacity = '0'; });
 
 function update(dt) {
   const inLobby = myRoom < 0;
-  if (!paintMode && !transitioning && !editMode && !waitingRoom && !escOpen && !frozen) {
+  if (!paintMode && !transitioning && !editMode && !waitingRoom && !escOpen && !frozen && !chatOpen) {
     let dx = 0, dz = 0;
     if (keys.has('KeyW') || keys.has('ArrowUp')) dz -= 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) dz += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
-    if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+    if (keys.has('ArrowRight')) dx += 1; // D는 춤 키
     me.moving = !!(dx || dz);
+    // D 홀드 = 제자리 쌈바 (이동 중엔 무시) — 리빌 강제 춤 중엔 유지
+    if (gameMode !== 'reveal' || !me.rainbow) {
+      me.dancing = keys.has('KeyD') && !me.moving;
+    }
     if (me.moving) {
       const speed = inLobby ? SPEED / 6 : SPEED; // 로비에선 둥둥 (1/6배)
       const bound = inLobby ? 13 : BOUND; // 로비는 고정 화면 안에서만
@@ -1467,15 +1626,17 @@ function update(dt) {
 
   me.group.position.set(myPos.x, 0, myPos.z);
   applyFloat(me, dt, inLobby);
+  if (me.dancing) me.dancePhase += dt * 8;
   compose(me);
 
-  // 다른 플레이어: 위치 보간 + 걸음 애니메이션
+  // 다른 플레이어: 위치 보간 + 걸음/춤 애니메이션
   for (const o of others.values()) {
     const g = o.char.group;
     g.position.x += (o.target.x - g.position.x) * Math.min(1, dt * 12);
     g.position.z += (o.target.z - g.position.z) * Math.min(1, dt * 12);
     if (g.visible) {
       if (o.char.moving) o.char.phase += dt * (inLobby ? 3 : 9);
+      if (o.char.dancing) o.char.dancePhase += dt * 8;
       applyFloat(o.char, dt, inLobby && o.room < 0);
       compose(o.char);
     }
@@ -1526,6 +1687,7 @@ window.__dbg = {
   get paint() { return paintMode; },
   get trans() { return transitioning; },
   get clicks() { return secretClicks; },
+  bgm,
   get conn() { return connected; },
   get waitFlag() { return waitingRoom; },
   step(dt, n = 1) { for (let i = 0; i < n; i++) update(dt); },

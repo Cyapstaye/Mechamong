@@ -168,6 +168,27 @@
     from { transform: translateX(-110%); }
     to { transform: translateX(110vw); }
   }
+
+  /* 채팅 */
+  #chatBox {
+    position: fixed; left: 16px; bottom: 16px; z-index: 35;
+    display: flex; flex-direction: column; gap: 6px; width: 340px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+  }
+  #chatLog { display: flex; flex-direction: column; gap: 4px; }
+  #chatLog .line {
+    color: #dbe7ff; background: rgba(8, 12, 22, 0.6);
+    padding: 4px 8px; border-radius: 6px; width: fit-content; max-width: 100%;
+    word-break: break-all;
+  }
+  #chatLog .line .who { color: #8fb7ff; font-weight: 700; }
+  #chatLog .line.sys { color: #ffd23f; }
+  #chatInput {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    background: rgba(8, 12, 22, 0.85); color: #eef4ff;
+    border: 1px solid #3a4d70; border-radius: 8px; outline: none;
+    font: inherit;
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -176,7 +197,7 @@
 
 <div id="hud">
   <div id="roomName"></div>
-  <div id="hint">WASD/Arrows to move · P to paint · Walk to a door to change rooms</div>
+  <div id="hint">Arrows/WAS to move · Hold D to dance · P to paint · Enter to chat</div>
 </div>
 
 <div id="paintUI" hidden>
@@ -212,6 +233,10 @@
 </div>
 
 <button id="readyBtn" hidden>READY</button>
+<div id="chatBox">
+  <div id="chatLog"></div>
+  <input id="chatInput" maxlength="120" autocomplete="off" spellcheck="false" hidden />
+</div>
 <div id="topTimer" hidden></div>
 <div id="bigTimer" hidden></div>
 <div id="banner"></div>

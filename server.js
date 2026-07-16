@@ -14,6 +14,8 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.json': 'application/json',
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
 };
 
 const ROUTES = { '/': 'landing.html', '/play': 'index.html' };
@@ -96,6 +98,7 @@ function broadcast(exceptId, obj) {
 const T_HEAD = +process.env.T_HEAD || 60;
 const T_PLAY = +process.env.T_PLAY || 240;
 const T_REVEAL = +process.env.T_REVEAL || 30;
+const T_END = +process.env.T_END || 50; // 라운드 종료 후 로비 복귀까지
 let phase = 'lobby';
 let phaseTimers = [];
 
@@ -149,13 +152,13 @@ function startGame() {
   }, T_HEAD * 1000));
 }
 
-function endRound(result) {
+function endRound(result, sur = false) {
   clearPhaseTimers();
   phase = 'ending';
-  console.log(`round ended: ${result} win`);
-  broadcastAll({ t: 'round-end', result });
-  // EZ 배너(5초) 동안 ending 유지 후 로비 복귀
-  phaseTimers.push(setTimeout(() => resetLobby(), result === 'finder' ? 5200 : 300));
+  console.log(`round ended: ${result} win${sur ? ' (surrender)' : ''}`);
+  broadcastAll({ t: 'round-end', result, sur: sur ? 1 : 0, stay: T_END });
+  // 셀레브레이션 동안 ending 유지 후 로비 복귀
+  phaseTimers.push(setTimeout(() => resetLobby(), T_END * 1000 + 300));
 }
 
 function resetLobby() {
@@ -203,7 +206,7 @@ function activate(socket, force = false) {
   const id = nextId++;
   socket._pid = id;
   const player = {
-    id, x: 0, z: 0, room: -1, f: 'down', mv: 0,
+    id, x: 0, z: 0, room: -1, f: 'down', mv: 0, d: 0,
     name: socket._name || '', role: socket._role || 'finder',
     ready: 0, caught: false, force, strokes: [],
   };
@@ -361,7 +364,8 @@ function handleMessage(id, msg) {
     p.room = msg.room | 0;
     p.f = typeof msg.f === 'string' ? msg.f.slice(0, 8) : p.f;
     p.mv = msg.mv ? 1 : 0;
-    broadcast(id, { t: 'player-update', id, x: p.x, z: p.z, room: p.room, f: p.f, mv: p.mv });
+    p.d = msg.d ? 1 : 0;
+    broadcast(id, { t: 'player-update', id, x: p.x, z: p.z, room: p.room, f: p.f, mv: p.mv, d: p.d });
   } else if (msg.t === 'paint' && Array.isArray(msg.strokes)) {
     const strokes = msg.strokes.slice(0, 500);
     p.strokes.push(...strokes);
@@ -373,6 +377,7 @@ function handleMessage(id, msg) {
   } else if (msg.t === 'ready') {
     if (phase !== 'lobby') return;
     p.ready = msg.on ? 1 : 0;
+    console.log(`player ${id} ready=${p.ready} (${[...players.values()].filter((q) => q.ready).length}/${players.size})`);
     tryStart();
   } else if (msg.t === 'shoot') {
     if (phase !== 'play' || p.role !== 'finder' || p.caught) return;
@@ -382,6 +387,17 @@ function handleMessage(id, msg) {
       dx: +msg.dx || 0, dz: +msg.dz || 0,
       room: msg.room | 0,
     });
+  } else if (msg.t === 'chat') {
+    const text = String(msg.text || '').trim().slice(0, 120);
+    if (!text) return;
+    if (text === '/gg.gg') {
+      // 항복: 친 놈이 진 걸로 라운드 종료
+      if (phase !== 'headstart' && phase !== 'play') return;
+      broadcastAll({ t: 'chat', sys: 1, text: `${p.name || 'player ' + id} surrendered` });
+      endRound(p.role === 'hider' ? 'finder' : 'hider', true);
+      return;
+    }
+    broadcastAll({ t: 'chat', id, name: p.name || `player ${id}`, text });
   } else if (msg.t === 'tag') {
     if (phase !== 'play' || p.role !== 'finder') return;
     const target = players.get(msg.id | 0);

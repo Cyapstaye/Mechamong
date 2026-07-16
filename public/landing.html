@@ -14,6 +14,13 @@
     image-rendering: pixelated;
   }
 
+  /* 히어로 타이틀: 200♥ */
+  #title {
+    position: fixed; top: 13%; left: 0;
+    width: 100vw; image-rendering: pixelated; z-index: 5;
+    pointer-events: none; user-select: none;
+  }
+
   /* 크루메이트 상반신 컴포넌트 */
   #bust {
     position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
@@ -67,6 +74,7 @@
 </head>
 <body>
 <canvas id="bg" width="512" height="512"></canvas>
+<canvas id="title" width="26" height="8"></canvas>
 
 <div id="bust">
   <canvas id="bustArt" width="64" height="56"></canvas>
@@ -164,6 +172,46 @@
   b.stroke();
   b.fillStyle = 'rgba(255,255,255,0.85)';
   b.fillRect(21, 18, 8, 3);
+
+  // ---------- 히어로 타이틀: 200♥ (픽셀 레터링) ----------
+  (() => {
+    const t = document.getElementById('title').getContext('2d');
+    const G2 = ['01110', '10001', '00001', '00010', '00100', '01000', '11111'];
+    const G0 = ['01110', '10001', '10011', '10101', '11001', '10001', '01110'];
+    const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
+    const draw = (rows, x, y, color) => {
+      t.fillStyle = color;
+      rows.forEach((row, ry) => {
+        for (let rx = 0; rx < row.length; rx++) {
+          if (row[rx] === '1') t.fillRect(x + rx, y + ry, 1, 1);
+        }
+      });
+    };
+    const SHADOW = '#141824';
+    // 좌우 여백 없이 캔버스 가장자리까지 (스크린 양끝에 딱 붙도록)
+    // 그림자 (아래로 1px) → 본색
+    draw(G2, 0, 1, SHADOW); draw(G0, 6, 1, SHADOW); draw(G0, 12, 1, SHADOW); draw(HEART, 19, 2, SHADOW);
+    draw(G2, 0, 0, '#f2f4f8'); draw(G0, 6, 0, '#f2f4f8'); draw(G0, 12, 0, '#f2f4f8');
+    draw(HEART, 19, 1, '#fb4343');
+    // 하트 하이라이트
+    t.fillStyle = '#ff9d9d';
+    t.fillRect(20, 2, 1, 1);
+    t.fillRect(21, 3, 1, 1);
+  })();
+
+  // ---------- 랜딩 징글 (로딩 시 1회) ----------
+  // 자동재생이 막히면 성공할 때까지 모든 상호작용에서 재시도
+  const jingle = new Audio('audio/landing.m4a');
+  jingle.volume = 0.6;
+  const jingleEvs = ['pointerdown', 'click', 'keydown', 'touchend'];
+  const tryJingle = () => {
+    if (jingle.ended || !jingle.paused) return;
+    jingle.play()
+      .then(() => jingleEvs.forEach((ev) => removeEventListener(ev, tryJingle)))
+      .catch(() => {});
+  };
+  jingleEvs.forEach((ev) => addEventListener(ev, tryJingle));
+  tryJingle();
 
   // ---------- 닉네임 / PLAY ----------
   const nameInput = document.getElementById('nameInput');
