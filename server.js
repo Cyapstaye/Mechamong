@@ -127,6 +127,7 @@ function startGame() {
   const rooms = {};
   for (const p of players.values()) {
     p.caught = false;
+    p.lobby = false;
     roles[p.id] = p.role;
     if (p.role === 'hider') {
       p.room = Math.floor(Math.random() * 3);
@@ -157,6 +158,12 @@ function endRound(result, sur = false) {
   phase = 'ending';
   console.log(`round ended: ${result} win${sur ? ' (surrender)' : ''}`);
   broadcastAll({ t: 'round-end', result, sur: sur ? 1 : 0, stay: T_END });
+  // 승부가 났으니 막혀 있던 대기자들은 바로 로비로 입장
+  while (players.size < MAX_PLAYERS && waiting.length) {
+    const s = waiting.shift();
+    if (!s.destroyed) activate(s);
+  }
+  sendWaitUpdates();
   // 셀레브레이션 동안 ending 유지 후 로비 복귀
   phaseTimers.push(setTimeout(() => resetLobby(), T_END * 1000 + 300));
 }
@@ -167,6 +174,7 @@ function resetLobby() {
   for (const p of players.values()) {
     p.ready = 0;
     p.caught = false;
+    p.lobby = true;
     p.room = -1;
     p.strokes = []; // 라운드 종료 — 색칠 초기화
   }
@@ -209,7 +217,7 @@ function activate(socket, force = false) {
   const player = {
     id, x: 0, z: 0, room: -1, f: 'down', mv: 0, d: 0,
     name: socket._name || '', role: socket._role || 'finder',
-    ready: 0, caught: false, force, strokes: [],
+    ready: 0, caught: false, lobby: true, force, strokes: [],
   };
   players.set(id, player);
   sockets.set(id, socket);
@@ -236,6 +244,10 @@ function handleClient(socket) {
       // 참여자가 전부 나가면 타이머와 무관하게 즉시 라운드 리셋 (ending 포함)
       if (players.size === 0 && phase !== 'lobby') {
         console.log('all players left — round reset');
+        resetLobby();
+      }
+      if (phase === 'ending' && players.size > 0 && [...players.values()].every((q) => q.lobby)) {
+        console.log('all back in lobby — early reset');
         resetLobby();
       }
       // 빈 슬롯에 대기열 선두 승격 (게임 중엔 승격 안 함)
@@ -302,8 +314,8 @@ function handleClient(socket) {
   socket.on('close', cleanup);
   socket.on('error', cleanup);
 
-  if (phase !== 'lobby') {
-    // 게임 진행 중 — 입장 불가, 라운드 끝나면 자동 입장
+  if (phase === 'headstart' || phase === 'play' || phase === 'reveal') {
+    // 라운드 진행 중 — 입장 불가, 끝나면 자동 입장 (ending/셀레브레이션은 입장 허용)
     waiting.push(socket);
     sendTo(socket, { t: 'in-progress' });
     console.log(`blocked: game in progress (${waiting.length} waiting)`);
@@ -354,14 +366,19 @@ function routeMessage(socket, raw) {
   if (socket._pid !== null) handleMessage(socket._pid, msg);
 }
 
-// 하트비트: 10초마다 ping, 30초 무응답 소켓은 정리 (대기열 포함, 유령 방지)
+// 하트비트: 5초마다 ping, 15초 무응답 소켓은 정리 (대기열 포함, 유령 방지)
 setInterval(() => {
   const now = Date.now();
   for (const s of [...sockets.values(), ...waiting]) {
-    if (now - (s._lastSeen || 0) > 30000) s.destroy();
+    if (now - (s._lastSeen || 0) > 15000) s.destroy();
     else if (!s.destroyed) s.write(encodeFrame('', 9));
   }
-}, 10000);
+  // 안전망: 게임 상태인데 플레이어가 아무도 없으면 무조건 로비로 복구
+  if (phase !== 'lobby' && players.size === 0) {
+    console.log('sweep: empty game state — reset to lobby');
+    resetLobby();
+  }
+}, 5000);
 
 function handleMessage(id, msg) {
   const p = players.get(id);
@@ -383,6 +400,12 @@ function handleMessage(id, msg) {
   } else if (msg.t === 'clear') {
     p.strokes = [];
     broadcast(id, { t: 'clear', id });
+  } else if (msg.t === 'back-lobby') {
+    p.lobby = true;
+    if (phase === 'ending' && [...players.values()].every((q) => q.lobby)) {
+      console.log('all back in lobby — early reset');
+      resetLobby(); // 전원 복귀 — 50초 안 기다리고 바로 READY 가능
+    }
   } else if (msg.t === 'ready') {
     if (phase !== 'lobby') return;
     p.ready = msg.on ? 1 : 0;

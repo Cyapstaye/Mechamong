@@ -635,6 +635,8 @@ function onNetMessage(e) {
       waitTipEl.textContent = "A round is running — you'll join the lobby when it ends";
       break;
     case 'game-start': {
+      clearTimeout(endTimer);
+      lobbyBtn.hidden = true;
       roles = msg.roles || {};
       myRole = roles[myId] || myRoleWanted;
       gameMode = 'headstart';
@@ -896,6 +898,7 @@ function fadeToRoom(roomIdx) {
 function backToLobby() {
   clearTimeout(endTimer);
   lobbyBtn.hidden = true;
+  if (connected && ws) ws.send(JSON.stringify({ t: 'back-lobby' }));
   gameMode = 'lobby';
   frozen = false;
   readyOn = false;
