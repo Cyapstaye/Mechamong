@@ -17,7 +17,7 @@
   /* 히어로 타이틀: 200♥ */
   #title {
     position: fixed; top: 13%; left: 0;
-    width: 100vw; image-rendering: pixelated; z-index: 5;
+    width: 100vw; image-rendering: pixelated; z-index: 1;
     pointer-events: none; user-select: none;
   }
 
@@ -25,6 +25,7 @@
   #bust {
     position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
     width: min(480px, 86vw); aspect-ratio: 64 / 56;
+    z-index: 5; /* 200♥ 타이틀보다 앞 */
   }
   #bustArt { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
   #nameInput {

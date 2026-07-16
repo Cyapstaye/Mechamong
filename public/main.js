@@ -1728,11 +1728,11 @@ function update(dt) {
     if (keys.has('KeyW') || keys.has('ArrowUp')) dz -= 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) dz += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
-    if (keys.has('ArrowRight')) dx += 1; // D는 춤 키
+    if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
     me.moving = !!(dx || dz);
-    // D 홀드 = 제자리 쌈바 (이동 중엔 무시) — 리빌 강제 춤 중엔 유지
+    // C 홀드 = 제자리 쌈바 (이동 중엔 무시) — 리빌 강제 춤 중엔 유지
     if (gameMode !== 'reveal' || !me.rainbow) {
-      me.dancing = keys.has('KeyD') && !me.moving;
+      me.dancing = keys.has('KeyC') && !me.moving;
     }
     if (me.moving) {
       const speed = inLobby ? SPEED / 6 : SPEED; // 로비에선 둥둥 (1/6배)
