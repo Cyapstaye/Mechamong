@@ -20,7 +20,7 @@
     position: fixed; top: 16px; left: 16px; color: #cfe3ff; z-index: 5;
     text-shadow: 0 1px 4px #000; user-select: none; pointer-events: none;
   }
-  #roomName { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  #roomName { font-family: 'Press Start 2P', monospace; font-size: 16px; letter-spacing: 2px; }
   #hint { font-size: 12px; opacity: 0.75; margin-top: 4px; }
   #muteTag {
     margin-top: 6px; display: inline-block;
@@ -147,6 +147,22 @@
   #readyBtn.on { background: #fb4343; color: #fff5f5; box-shadow: 0 6px 0 #a82828; }
   #readyBtn.on:active { background: #ff7061; box-shadow: 0 2px 0 #a82828; }
 
+  /* 라운드 종료 후 로비 복귀 버튼 (PLAY와 동일 스타일) */
+  #lobbyBtn {
+    position: fixed; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 30;
+    border: none; border-radius: 10px; cursor: pointer;
+    padding: 18px 42px;
+    font-family: 'Press Start 2P', monospace; font-size: 13px; letter-spacing: 2px;
+    background: #382d60; color: #f2f4f8;
+    box-shadow: 0 6px 0 #221b42;
+    transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
+  }
+  #lobbyBtn:active {
+    background: #4f4187;
+    transform: translate(-50%, 4px);
+    box-shadow: 0 2px 0 #221b42;
+  }
+
   /* 타이머 HUD */
   #topTimer {
     position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 30;
@@ -239,6 +255,7 @@
 </div>
 
 <button id="readyBtn" hidden>READY</button>
+<button id="lobbyBtn" hidden>BACK TO LOBBY</button>
 <div id="chatBox">
   <div id="chatLog"></div>
   <input id="chatInput" maxlength="120" autocomplete="off" spellcheck="false" hidden />

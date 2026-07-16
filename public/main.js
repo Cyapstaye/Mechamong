@@ -455,6 +455,48 @@ function clearChar(char) {
   char.pctx.fillRect(0, 0, SPR, SPR);
 }
 
+// 대기실 머리 위 닉네임: READY와 같은 서체, 절반 크기, 박스 없이 텍스트만
+function makeNameLabel(text) {
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d');
+  const FS = 16; // 캔버스엔 크게 그려서 월드에서 축소 (선명도 유지)
+  const font = `${FS}px 'Press Start 2P', monospace`;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  const draw = () => {
+    g.font = font;
+    const w = Math.max(24, Math.ceil(g.measureText(text).width) + 4);
+    c.width = w;
+    c.height = FS + 6;
+    g.font = font;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = '#f2f4f8';
+    g.fillText(text, w / 2, (FS + 6) / 2);
+    tex.needsUpdate = true;
+    // READY(13px)와 같은 크기로 보이게
+    const s = 0.021;
+    spr.scale.set(w * s, (FS + 6) * s, 1);
+  };
+  draw();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw); // 픽셀 폰트 로드 후 다시
+  // 로비 카메라가 거의 수직이라 월드 높이 대신 화면 기준으로 위에 띄움
+  // (center y가 라벨 높이 단위 — -3 ≈ 캐릭터 머리 위 여백)
+  spr.center.set(0.5, -3);
+  spr.position.y = 0;
+  spr.visible = false; // 로비에서만 표시
+  return spr;
+}
+
+function attachLabel(char, name) {
+  if (char.label) char.group.remove(char.label);
+  char.label = makeNameLabel(name || '???');
+  char.group.add(char.label);
+}
+
 // 내 캐릭터
 const me = createCharacter();
 gameScene.add(me.group);
@@ -466,6 +508,7 @@ const others = new Map(); // id -> { char, target: {x,z}, room }
 
 function addOther(p) {
   const char = createCharacter();
+  attachLabel(char, p.name);
   for (const s of p.strokes || []) drawStroke(char, s);
   char.facing = p.f || 'down';
   char.moving = !!p.mv;
@@ -488,6 +531,7 @@ let connected = false;
 let waitingRoom = false; // 서버 정원(30명) 초과로 대기 중
 const myStrokes = []; // 재접속 시 페인트 복원용 전체 히스토리
 const myName = (localStorage.getItem('mechamon-name') || '').slice(0, 16);
+attachLabel(me, myName);
 const waitOverlay = document.getElementById('waitOverlay');
 const waitPosEl = document.getElementById('waitPos');
 
@@ -668,7 +712,9 @@ function onNetMessage(e) {
           }
         }
       }
-      setTimeout(backToLobby, stay);
+      clearTimeout(endTimer);
+      endTimer = setTimeout(backToLobby, stay);
+      lobbyBtn.hidden = false; // 승자 결정 — 바로 로비로 갈 수 있는 버튼
       break;
     }
     case 'chat':
@@ -676,6 +722,16 @@ function onNetMessage(e) {
       break;
     case 'abort':
       location.href = '/';
+      break;
+    case 'name': {
+      const o = others.get(msg.id);
+      if (o) attachLabel(o.char, msg.name);
+      break;
+    }
+    case 'lobby-reset':
+      // 서버 기준 로비 리셋 — READY 표시를 서버 상태(전원 해제)와 맞춤
+      readyOn = false;
+      readyBtn.classList.remove('on');
       break;
     case 'force-denied':
       // 시크릿 입장 거부 (오버플로우 2명 꽉 참) — 내가 방금 시도한 경우에만 붉게
@@ -776,6 +832,13 @@ let topTimerEnd = 0;
 let bigTimerEnd = 0;
 
 const readyBtn = document.getElementById('readyBtn');
+const lobbyBtn = document.getElementById('lobbyBtn');
+let endTimer = null;
+
+lobbyBtn.addEventListener('click', () => {
+  lobbyBtn.blur();
+  backToLobby(); // 셀레브레이션 스킵하고 즉시 로비로
+});
 const topTimerEl = document.getElementById('topTimer');
 const bigTimerEl = document.getElementById('bigTimer');
 const bannerEl = document.getElementById('banner');
@@ -831,6 +894,8 @@ function fadeToRoom(roomIdx) {
 }
 
 function backToLobby() {
+  clearTimeout(endTimer);
+  lobbyBtn.hidden = true;
   gameMode = 'lobby';
   frozen = false;
   readyOn = false;
@@ -1646,6 +1711,7 @@ function applyFloat(char, dt, on) {
     char.sprite.position.y = 1.05;
     char.shadow.visible = true;
   }
+  if (char.label) char.label.visible = on; // 닉네임은 대기실에서만
 }
 const clock = new THREE.Clock();
 let moveTimer = 0;

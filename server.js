@@ -175,6 +175,7 @@ function resetLobby() {
     if (!s.destroyed) activate(s);
   }
   sendWaitUpdates();
+  broadcastAll({ t: 'lobby-reset' }); // ending 중 눌린 READY 등 클라 상태 정리
 }
 
 function checkAbort() {
@@ -327,7 +328,10 @@ function routeMessage(socket, raw) {
     socket._role = msg.role === 'hider' ? 'hider' : 'finder';
     const p = socket._pid !== null ? players.get(socket._pid) : null;
     if (p) {
-      p.name = socket._name;
+      if (p.name !== socket._name) {
+        p.name = socket._name;
+        broadcast(socket._pid, { t: 'name', id: p.id, name: p.name }); // 늦게 온 이름 전파
+      }
       p.role = socket._role;
     }
     return;
