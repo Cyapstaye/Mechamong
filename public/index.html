@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mechamon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #fade {
+    position: fixed; inset: 0; background: #000; pointer-events: none;
+    opacity: 1; transition: opacity 0.35s ease;
+  }
+
+  #hud {
+    position: fixed; top: 16px; left: 16px; color: #cfe3ff; z-index: 5;
+    text-shadow: 0 1px 4px #000; user-select: none; pointer-events: none;
+  }
+  #roomName { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  #hint { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+
+  #paintUI {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    background: rgba(15, 20, 32, 0.94); border: 1px solid #2b3a55;
+    border-radius: 12px; padding: 14px; width: 210px; color: #dbe7ff;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  }
+  #paintUI h2 {
+    margin: -14px -14px 10px; padding: 10px 14px; font-size: 14px; letter-spacing: 1px;
+    cursor: move; user-select: none; border-bottom: 1px solid #2b3a55;
+  }
+  #svBox {
+    position: relative; width: 100%; height: 190px; border-radius: 10px; cursor: crosshair;
+    background:
+      linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+      linear-gradient(to right, #fff, var(--hue-color, #f00));
+  }
+  #paintUI .thumb {
+    position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.55);
+    transform: translate(-50%, -50%); pointer-events: none; box-sizing: border-box;
+  }
+  #paintUI .hueRow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  #eyedropBtn {
+    background: none; border: none; padding: 2px; cursor: pointer;
+    color: #dbe7ff; display: flex; align-items: center;
+  }
+  #eyedropBtn:hover { color: #ffffff; }
+  #eyedropBtn.on { color: #4fd8ff; }
+  #hueBar {
+    position: relative; flex: 1; height: 14px; border-radius: 7px; cursor: crosshair;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  #alphaBar {
+    position: relative; height: 14px; border-radius: 7px; margin-top: 14px; cursor: crosshair;
+    background: repeating-conic-gradient(#9aa0aa 0% 25%, #e8eaee 0% 50%) 0 0 / 12px 12px;
+  }
+  #alphaFill { position: absolute; inset: 0; border-radius: 7px; pointer-events: none; }
+  #paintUI label { display: block; font-size: 12px; margin: 14px 0 4px; opacity: 0.85; }
+  #paintUI input[type="range"] { width: 100%; }
+  #brushSizeVal { float: right; opacity: 0.7; }
+
+  #editUI {
+    position: fixed; top: 16px; right: 16px; z-index: 20;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #editUI button {
+    padding: 8px 14px; border: 1px solid #3a4d70; border-radius: 8px;
+    background: rgba(27, 42, 69, 0.95); color: #dbe7ff; font-size: 12px; cursor: pointer;
+  }
+  #editUI button:hover { background: #24375c; }
+  #editUI #exportBtn { background: #2f6d4b; border-color: #4fa578; font-weight: 700; }
+  #editUI #exportBtn:hover { background: #388357; }
+  #editHint {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
+    color: #cfe3ff; font-size: 12px; opacity: 0.8; text-shadow: 0 1px 4px #000; user-select: none;
+  }
+  #exportModal {
+    position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #exportModal .box {
+    background: #101624; border: 1px solid #2b3a55; border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  #exportText {
+    width: 520px; height: 380px; resize: none; background: #0a0f1a; color: #b9d4a0;
+    border: 1px solid #2b3a55; border-radius: 8px; padding: 10px;
+    font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre;
+  }
+  #exportModal button {
+    align-self: flex-end; padding: 8px 16px; border: 1px solid #3a4d70; border-radius: 8px;
+    background: #1b2a45; color: #dbe7ff; font-size: 12px; cursor: pointer;
+  }
+  #waitOverlay {
+    position: fixed; inset: 0; z-index: 40; background: rgba(4, 5, 10, 0.9);
+    display: flex; align-items: center; justify-content: center;
+    color: #cfe3ff; text-align: center; user-select: none;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  #waitOverlay .waitTitle { font-size: 26px; font-weight: 800; letter-spacing: 6px; opacity: 0.85; }
+  #waitPos { font-size: 52px; font-weight: 800; margin: 18px 0; }
+  #waitOverlay .waitTip { font-size: 13px; opacity: 0.55; }
+  #escMenu {
+    position: fixed; inset: 0; z-index: 50; background: rgba(4, 5, 10, 0.72);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #leaveBtn {
+    border: none; border-radius: 10px; cursor: pointer;
+    padding: 18px 42px;
+    font-family: 'Press Start 2P', monospace; font-size: 13px; letter-spacing: 2px;
+    background: #fb4343; color: #fff5f5;
+    box-shadow: 0 6px 0 #a82828;
+    transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
+  }
+  #leaveBtn:active {
+    background: #ff7061;
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #a82828;
+  }
+  #waitPos.denied { color: #fb4343; }
+
+  /* 대기실 READY 버튼 */
+  #readyBtn {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30;
+    border: none; border-radius: 10px; cursor: pointer;
+    padding: 18px 46px;
+    font-family: 'Press Start 2P', monospace; font-size: 13px; letter-spacing: 2px;
+    background: #e2e2e2; color: #111318;
+    box-shadow: 0 6px 0 #9a9da3;
+    transition: background 0.05s, box-shadow 0.05s;
+  }
+  #readyBtn:active {
+    background: #f6f6f6;
+    transform: translate(-50%, calc(-50% + 4px));
+    box-shadow: 0 2px 0 #9a9da3;
+  }
+  #readyBtn.on { background: #fb4343; color: #fff5f5; box-shadow: 0 6px 0 #a82828; }
+  #readyBtn.on:active { background: #ff7061; box-shadow: 0 2px 0 #a82828; }
+
+  /* 타이머 HUD */
+  #topTimer {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 30;
+    font-family: 'Press Start 2P', monospace; font-size: 24px; color: #fff;
+    text-shadow: 0 2px 8px #000; pointer-events: none; user-select: none;
+  }
+  #bigTimer {
+    position: fixed; inset: 0; z-index: 45; background: rgba(4, 5, 10, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Press Start 2P', monospace; font-size: 18vw; color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 4px 24px #000; pointer-events: none; user-select: none;
+  }
+
+  /* 가로질러 날아가는 배너 (START / EZ / HAHA) */
+  #banner {
+    position: fixed; top: 36%; left: 0; z-index: 60;
+    font-family: 'Press Start 2P', monospace; font-size: 10vw; white-space: nowrap;
+    text-shadow: 0 6px 0 rgba(0, 0, 0, 0.55);
+    pointer-events: none; user-select: none;
+    transform: translateX(-150%);
+  }
+  #banner.fly { animation: bannerFly 2.6s linear forwards; }
+  @keyframes bannerFly {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(110vw); }
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div id="roomName"></div>
+  <div id="hint">WASD/Arrows to move · P to paint · Walk to a door to change rooms</div>
+</div>
+
+<div id="paintUI" hidden>
+  <h2 id="paintDrag">Painting</h2>
+  <div id="svBox"><div id="svThumb" class="thumb"></div></div>
+  <div class="hueRow">
+    <button id="eyedropBtn" title="Eyedropper">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18.2 2.8a2.8 2.8 0 0 1 4 4l-2.6 2.6-4-4 2.6-2.6z" fill="currentColor" stroke="none"/>
+        <path d="M15 6.4l2.6 2.6-8.7 8.7c-.5.5-1.2.9-1.9 1.1l-3.2.8.8-3.2c.2-.7.6-1.4 1.1-1.9L14.4 6z"/>
+      </svg>
+    </button>
+    <div id="hueBar"><div id="hueThumb" class="thumb"></div></div>
+  </div>
+  <div id="alphaBar"><div id="alphaFill"></div><div id="alphaThumb" class="thumb"></div></div>
+  <label>Brush Size <span id="brushSizeVal">3</span></label>
+  <input type="range" id="brushSize" min="1" max="10" value="3" />
+</div>
+
+<div id="editUI" hidden>
+  <button id="roomBtn">Next Room ▶</button>
+  <button id="addRectBtn">+ Rect</button>
+  <button id="addCircleBtn">+ Circle</button>
+  <button id="delBtn">Delete</button>
+  <button id="exportBtn">Export</button>
+</div>
+<div id="editHint" hidden>Click: select · Drag: move · White handles: resize · Blue handle: rotate (Shift: 15° snap) · ⌘⌥M: close</div>
+<div id="exportModal" hidden>
+  <div class="box">
+    <textarea id="exportText" readonly spellcheck="false"></textarea>
+    <button id="exportClose">Close</button>
+  </div>
+</div>
+
+<button id="readyBtn" hidden>READY</button>
+<div id="topTimer" hidden></div>
+<div id="bigTimer" hidden></div>
+<div id="banner"></div>
+
+<div id="escMenu" hidden>
+  <button id="leaveBtn">LEAVE ROUND</button>
+</div>
+
+<div id="waitOverlay" hidden>
+  <div>
+    <div class="waitTitle" id="waitTitle">WAITLIST</div>
+    <div id="waitPos">- / -</div>
+    <div class="waitTip" id="waitTip">Server is full (30 max) — you'll join automatically when a slot opens</div>
+  </div>
+</div>
+
+<div id="fade"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>

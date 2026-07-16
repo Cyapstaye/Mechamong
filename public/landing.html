@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mechamon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050510; }
+  #bg {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; /* 늘리지 않고 화면 비율대로 최대 크롭 */
+    image-rendering: pixelated;
+  }
+
+  /* 크루메이트 상반신 컴포넌트 */
+  #bust {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: min(480px, 86vw); aspect-ratio: 64 / 56;
+  }
+  #bustArt { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  #nameInput {
+    position: absolute; left: 30%; top: 30%; width: 40%; height: 21%;
+    background: none; border: none; outline: none; text-align: center;
+    font-family: 'Press Start 2P', monospace; font-size: clamp(7px, 2vmin, 10px);
+    color: #133a4d;
+  }
+  #nameInput::placeholder { color: rgba(19, 58, 77, 0.45); }
+  #playBtn {
+    position: absolute; left: 27%; top: 72%; width: 46%; padding: 4.2% 0;
+    border: none; border-radius: 10px; cursor: pointer;
+    font-family: 'Press Start 2P', monospace; font-size: clamp(8px, 2.4vmin, 12px);
+    letter-spacing: 2px;
+    background: #382d60; color: #f2f4f8;
+    box-shadow: 0 6px 0 #221b42;
+    transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
+  }
+  #playBtn:not(:disabled):active {
+    background: #4f4187;
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #221b42;
+  }
+  #playBtn:disabled {
+    background: #e6e8ec; color: #9aa1ad; cursor: default;
+    box-shadow: 0 6px 0 rgba(0, 0, 0, 0.18);
+  }
+
+  /* 역할 선택 */
+  #roleOverlay {
+    position: fixed; inset: 0; z-index: 20; background: rgba(4, 5, 10, 0.72);
+    display: flex; align-items: center; justify-content: center; gap: 28px;
+  }
+  .roleBtn {
+    border: none; border-radius: 10px; cursor: pointer;
+    padding: 20px 38px;
+    font-family: 'Press Start 2P', monospace; font-size: 14px; letter-spacing: 2px;
+    color: #f2f4f8;
+    transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
+  }
+  #hiderBtn { background: #382d60; box-shadow: 0 6px 0 #221b42; }
+  #hiderBtn:active { background: #4f4187; transform: translateY(4px); box-shadow: 0 2px 0 #221b42; }
+  #finderBtn { background: #fb4343; box-shadow: 0 6px 0 #a82828; }
+  #finderBtn:active { background: #ff7061; transform: translateY(4px); box-shadow: 0 2px 0 #a82828; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="bg" width="512" height="512"></canvas>
+
+<div id="bust">
+  <canvas id="bustArt" width="64" height="56"></canvas>
+  <input id="nameInput" maxlength="16" placeholder="Enter Player Name" autocomplete="off" spellcheck="false" />
+  <button id="playBtn" disabled>PLAY</button>
+</div>
+
+<div id="roleOverlay" hidden>
+  <button class="roleBtn" id="hiderBtn">HIDER</button>
+  <button class="roleBtn" id="finderBtn">FINDER</button>
+</div>
+
+<script>
+  // ---------- 깔끔한 우주 배경 (512x512, 시드 고정) ----------
+  const ctx = document.getElementById('bg').getContext('2d');
+  let seed = 20260715;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+  const base = ctx.createLinearGradient(0, 0, 0, 512);
+  base.addColorStop(0, '#070818');
+  base.addColorStop(1, '#04040e');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 512, 512);
+
+  function blob(x, y, r, rgb, a) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${a})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+  }
+  blob(475, 110, 260, '110,72,168', 0.18);
+  blob(510, 260, 190, '128,84,190', 0.12);
+  blob(455, 60, 110, '150,100,215', 0.12);
+  blob(55, 430, 230, '95,62,155', 0.15);
+  blob(120, 500, 130, '120,80,185', 0.10);
+  blob(210, 90, 190, '58,74,150', 0.08);
+
+  const starColors = ['221,226,238', '255,255,255', '157,184,255', '168,232,240'];
+  for (let i = 0; i < 380; i++) {
+    const x = Math.floor(rnd() * 512);
+    const y = Math.floor(rnd() * 512);
+    const c = starColors[Math.floor(rnd() * starColors.length)];
+    const a = 0.25 + rnd() * 0.55;
+    const size = rnd() < 0.08 ? 2 : 1;
+    ctx.fillStyle = `rgba(${c},${a})`;
+    ctx.fillRect(x, y, size, size);
+  }
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillRect(Math.floor(rnd() * 512), Math.floor(rnd() * 512), 2, 2);
+  }
+
+  // ---------- 크루메이트 상반신 (64x56 로컬 픽셀 → CSS 업스케일) ----------
+  const b = document.getElementById('bustArt').getContext('2d');
+  const OUTLINE = '#141824', BODY = '#c9ced8', SHADE = '#aab1bf', DARK = '#3a4150';
+
+  // 양옆 어두운 사이드 패널
+  b.fillStyle = DARK;
+  b.fillRect(9, 34, 6, 22);
+  b.fillRect(49, 34, 6, 22);
+  b.strokeStyle = OUTLINE;
+  b.lineWidth = 2;
+  b.strokeRect(10, 35, 4, 21);
+  b.strokeRect(50, 35, 4, 21);
+
+  // 헬멧+몸통 실루엣 (윗모서리 대각 컷)
+  b.beginPath();
+  b.moveTo(22, 6);
+  b.lineTo(42, 6);
+  b.lineTo(50, 14);
+  b.lineTo(50, 56);
+  b.lineTo(14, 56);
+  b.lineTo(14, 14);
+  b.closePath();
+  b.fillStyle = BODY;
+  b.fill();
+  // 우측 셰이딩
+  b.save();
+  b.clip();
+  b.fillStyle = SHADE;
+  b.fillRect(46, 6, 6, 50);
+  b.restore();
+  b.strokeStyle = OUTLINE;
+  b.lineWidth = 2;
+  b.stroke();
+
+  // 바이저
+  b.beginPath();
+  b.roundRect(18, 16, 28, 14, 7);
+  b.fillStyle = '#8fe3ff';
+  b.fill();
+  b.strokeStyle = OUTLINE;
+  b.lineWidth = 2;
+  b.stroke();
+  b.fillStyle = 'rgba(255,255,255,0.85)';
+  b.fillRect(21, 18, 8, 3);
+
+  // ---------- 닉네임 / PLAY ----------
+  const nameInput = document.getElementById('nameInput');
+  const playBtn = document.getElementById('playBtn');
+
+  const saved = localStorage.getItem('mechamon-name');
+  if (saved) nameInput.value = saved;
+
+  const roleOverlay = document.getElementById('roleOverlay');
+
+  const refresh = () => { playBtn.disabled = nameInput.value.trim().length === 0; };
+  nameInput.addEventListener('input', refresh);
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !playBtn.disabled) openRoles(); });
+  playBtn.addEventListener('click', openRoles);
+  refresh();
+  nameInput.focus();
+
+  // PLAY → 역할 선택 → 대기실 입장
+  function openRoles() {
+    localStorage.setItem('mechamon-name', nameInput.value.trim().slice(0, 16));
+    roleOverlay.hidden = false;
+  }
+  roleOverlay.addEventListener('click', (e) => { if (e.target === roleOverlay) roleOverlay.hidden = true; });
+  document.getElementById('hiderBtn').addEventListener('click', () => go('hider'));
+  document.getElementById('finderBtn').addEventListener('click', () => go('finder'));
+
+  function go(role) {
+    localStorage.setItem('mechamon-role', role);
+    location.href = '/play';
+  }
+</script>
+</body>
+</html>
